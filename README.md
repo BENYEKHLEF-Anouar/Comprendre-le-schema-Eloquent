@@ -1,166 +1,204 @@
 ````markdown
-# 2.1.1 — Migrations & Modèles Eloquent
+# 2.1.2 — Déclaration des relations Eloquent
 
 > **Prérequis :**
-> - Projet Laravel 11 fonctionnel (`blog-laravel`)
-> - Base de données MySQL configurée dans `.env`
+> - Les migrations et modèles `User`, `Article` et `Tag` doivent être créés (voir le tutoriel **2.1.1 — Migrations & Modèles Eloquent**).
+> - Base MySQL fonctionnelle et synchronisée.
+
+---
+
+## Glossaire minute
+
+| Terme | Définition |
+|--------|-------------|
+| **Relation 1-n** (`hasMany` / `belongsTo`) | Un parent possède plusieurs enfants (ex. `User → Articles`) |
+| **Relation n-n** (`belongsToMany`) | Deux entités reliées via une table pivot (ex. `Article ↔ Tag`) |
+| **Pivot** | Table intermédiaire contenant les identifiants des deux entités (`article_tag`) |
+| **Eager loading** | Chargement anticipé des relations pour éviter le problème N+1 |
 
 ---
 
 ## Objectif pédagogique
 
-Créer un schéma relationnel complet pour un blog Laravel :
+Déclarer et tester les relations entre modèles Eloquent du projet **Blog** :
 
-- Définir les tables et leurs relations physiques (**PK / FK**)
-- Appliquer les contraintes d’intégrité (`unique`, `cascadeOnDelete`)
-- Générer les modèles Eloquent correspondants (`Article`, `Tag`)
-- Vérifier la cohérence dans **Tinker**
+- `User → hasMany(Article)`
+- `Article → belongsTo(User)`
+- `Article ↔ Tag` via `belongsToMany`
+- Utiliser `with()` et `withCount()` pour interroger efficacement les relations.
 
 ---
 
-## Commandes principales
+## Définition théorique
 
-### 1. Créer les migrations
+| Relation | Exemple | Description |
+|-----------|----------|-------------|
+| **1 → n** | `User → Article` | Un utilisateur possède plusieurs articles |
+| **n → 1** | `Article → User` | Un article appartient à un utilisateur |
+| **n ↔ n** | `Article ↔ Tag` | Plusieurs articles peuvent avoir plusieurs tags |
 
-```bash
-php artisan make:migration create_articles_table
-php artisan make:migration create_tags_table
-php artisan make:migration create_article_tag_table
+💡 Ces relations permettent une navigation fluide entre les entités :
+
+```php
+$user->articles;   // articles de l’utilisateur
+$article->user;    // auteur de l’article
+$article->tags;    // tags associés à l’article
+$tag->articles;    // articles associés à un tag
 ````
 
 ---
 
-### 2. Exécuter les migrations
+## Tutoriel pratique
 
-```bash
-php artisan migrate
-```
+### Étape 1 — Déclarer la relation `User → Article`
 
-Vérification MySQL :
+Un utilisateur peut écrire plusieurs articles : **hasMany()**
 
-```sql
-SHOW TABLES;
-SHOW CREATE TABLE articles;
+📄 `app/Models/User.php`
+
+```php
+public function articles()
+{
+    return $this->hasMany(Article::class);
+}
 ```
 
 ---
 
-### 3. Créer les modèles Eloquent
+### Étape 2 — Déclarer la relation `Article → User`
 
-```bash
-php artisan make:model Article
-php artisan make:model Tag
+Un article appartient à un seul utilisateur : **belongsTo()**
+
+📄 `app/Models/Article.php`
+
+```php
+public function user()
+{
+    return $this->belongsTo(User::class);
+}
 ```
-
-Le modèle `User` est déjà présent par défaut dans `app/Models/User.php`.
 
 ---
 
-### 4. Tester les modèles avec Tinker
+### Étape 3 — Déclarer la relation `Article ↔ Tag` (n-n)
+
+Un article peut avoir plusieurs tags, et un tag peut être associé à plusieurs articles.
+Cette relation passe par la table pivot `article_tag`.
+
+📄 `app/Models/Article.php`
+
+```php
+public function tags()
+{
+    return $this->belongsToMany(Tag::class);
+}
+```
+
+📄 `app/Models/Tag.php`
+
+```php
+public function articles()
+{
+    return $this->belongsToMany(Article::class);
+}
+```
+
+---
+
+### Étape 4 — Charger les relations (**Eager loading**)
+
+Évite le problème N+1 en chargeant les relations à l’avance.
+
+```php
+// Sans eager loading (risque N+1)
+$articles = App\Models\Article::all();
+
+// Avec eager loading
+$articles = App\Models\Article::with(['user', 'tags'])->get();
+```
+
+Vérifie le nombre de requêtes dans :
+
+* `storage/logs/laravel.log`
+* ou via **Laravel Debugbar**
+
+---
+
+### Étape 5 — Ajouter un compteur de relation (**withCount**)
+
+`withCount()` ajoute une colonne virtuelle `*_count` sur le modèle.
+
+```php
+$articles = App\Models\Article::withCount('tags')->get();
+
+foreach ($articles as $a) {
+    echo $a->title.' ('.$a->tags_count.' tags)';
+}
+```
+
+---
+
+### Étape 6 — Vérification dans **Tinker**
 
 ```bash
 php artisan tinker
 ```
 
-Exemples de commandes à exécuter dans Tinker :
+Commandes à tester :
 
 ```php
->>> App\Models\Article::count();
->>> App\Models\Tag::create(['name' => 'Laravel', 'slug' => 'laravel']);
->>> App\Models\Tag::all();
+>>> $u = App\Models\User::first();
+>>> $u->articles; // liste des articles du user
+
+>>> $a = App\Models\Article::first();
+>>> $a->user; // auteur de l’article
+>>> $a->tags; // liste des tags liés
+
+>>> $t = App\Models\Tag::first();
+>>> $t->articles; // articles associés à ce tag
+
+>>> App\Models\Article::with(['user','tags'])->withCount('tags')->first();
 ```
 
-Si la création et la récupération fonctionnent, le schéma et les modèles sont synchronisés.
+Si ces commandes renvoient des objets Eloquent, les relations fonctionnent.
 
 ---
 
-## Structure du projet
+## Bonus — Navigation entre relations
 
-```
-database/
-└── migrations/
-    ├── 2014_10_12_000000_create_users_table.php
-    ├── 2025_10_24_000001_create_articles_table.php
-    ├── 2025_10_24_000002_create_tags_table.php
-    └── 2025_10_24_000003_create_article_tag_table.php
-
-app/
-└── Models/
-    ├── User.php
-    ├── Article.php
-    └── Tag.php
-```
-
----
-
-## Rappels — Schéma des tables
-
-### `users`
+Afficher les tags du premier article d’un utilisateur :
 
 ```php
-$table->id();
-$table->string('name');
-$table->string('email')->unique();
-$table->string('password');
-$table->timestamps();
-```
+$user = App\Models\User::with('articles.tags')->first();
 
-### `articles`
-
-```php
-$table->id();
-$table->foreignId('user_id')->constrained()->cascadeOnDelete();
-$table->string('title', 180);
-$table->string('slug', 200)->unique();
-$table->text('excerpt')->nullable();
-$table->longText('content')->nullable();
-$table->timestamps();
-```
-
-### `tags`
-
-```php
-$table->id();
-$table->string('name')->unique();
-$table->string('slug')->unique();
-$table->timestamps();
-```
-
-### `article_tag` (table pivot)
-
-```php
-$table->foreignId('article_id')->constrained()->cascadeOnDelete();
-$table->foreignId('tag_id')->constrained()->cascadeOnDelete();
-$table->primary(['article_id', 'tag_id']);
+foreach ($user->articles as $article) {
+    echo "Article : {$article->title}\n";
+    echo "Tags : ". $article->tags->pluck('name')->join(', ') ."\n\n";
+}
 ```
 
 ---
 
-## Types de colonnes utiles
+## Résumé et points-clés
 
-| Type                     | Exemple                                          | Description                |
-| ------------------------ | ------------------------------------------------ | -------------------------- |
-| `string`                 | `$table->string('title', 255);`                  | Texte court (VARCHAR)      |
-| `text`                   | `$table->text('content');`                       | Texte long                 |
-| `integer` / `bigInteger` | `$table->integer('age');`                        | Nombre entier              |
-| `boolean`                | `$table->boolean('is_active');`                  | Booléen                    |
-| `decimal` / `float`      | `$table->decimal('price', 8, 2);`                | Nombre avec décimales      |
-| `date` / `timestamp`     | `$table->timestamp('published_at');`             | Date et heure              |
-| `enum`                   | `$table->enum('status', ['draft','published']);` | Liste de valeurs possibles |
-| `json`                   | `$table->json('meta');`                          | Données JSON               |
-| `foreignId`              | `$table->foreignId('user_id')->constrained();`   | Clé étrangère              |
-| `softDeletes`            | `$table->softDeletes();`                         | Suppression logique        |
+| Relation          | Méthode                 | Exemple pratique                        |
+| ----------------- | ----------------------- | --------------------------------------- |
+| **1-n**           | `hasMany` / `belongsTo` | `$user->articles`, `$article->user`     |
+| **n-n**           | `belongsToMany`         | `$article->tags`, `$tag->articles`      |
+| **Eager loading** | `with()`                | `Article::with(['user','tags'])->get()` |
+| **Compteur**      | `withCount()`           | `Article::withCount('tags')->first()`   |
 
----
 
-## Résumé
+| Relation      | Method in Model   | Code Example                            | Direction          |
+| ------------- | ----------------- | --------------------------------------- | ------------------ |
+| 1-n           | `hasMany()`       | `$user->articles`                       | User → Articles    |
+| n-1           | `belongsTo()`     | `$article->user`                        | Article → User     |
+| n-n           | `belongsToMany()` | `$article->tags`, `$tag->articles`      | Article ↔ Tag      |
+| Eager Loading | `with()`          | `Article::with(['user','tags'])->get()` | Query Optimization |
+| Counting      | `withCount()`     | `Article::withCount('tags')->get()`     | Relation Count     |
 
-| Concept             | Description                       | Exemple                               |
-| ------------------- | --------------------------------- | ------------------------------------- |
-| **Migration**       | Structure versionnée d’une table  | `create_articles_table`               |
-| **PK / FK**         | Clés d’intégrité référentielle    | `foreignId('user_id')->constrained()` |
-| **Modèle Eloquent** | Classe PHP représentant une table | `Article`, `Tag`                      |
-| **$fillable**       | Champs modifiables en masse       | `['title', 'slug']`                   |
-| **Tinker**          | Console interactive Eloquent      | `php artisan tinker`                  |
 
 ---
+
+
+
