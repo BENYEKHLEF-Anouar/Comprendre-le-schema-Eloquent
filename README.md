@@ -158,6 +158,10 @@ Commandes à tester :
 >>> $t->articles; // articles associés à ce tag
 
 >>> App\Models\Article::with(['user','tags'])->withCount('tags')->first();
+
+>>> App\Models\User::count();
+>>> App\Models\Article::count();
+>>> App\Models\Tag::count();
 ```
 
 Si ces commandes renvoient des objets Eloquent, les relations fonctionnent.
