@@ -164,5 +164,3 @@ $table->primary(['article_id', 'tag_id']);
 | **Tinker**          | Console interactive Eloquent      | `php artisan tinker`                  |
 
 ---
-
-```
