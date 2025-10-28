@@ -328,6 +328,14 @@ Si toutes ces commandes renvoient des données, les seeders fonctionnent.
 > Les **Factories** définissent la *forme* des données,  
 > Les **Seeders** les *insèrent*,  
 > Et **DatabaseSeeder** orchestre l’ensemble pour peupler la base automatiquement.
-````
 
+---
+
+**Migration**: A PHP class that defines database schema changes (e.g., creating tables, adding columns). It's like a version-controlled SQL script.
+**Model**: An Eloquent class (e.g., User.php) that represents a database table and provides an ORM (Object-Relational Mapping) interface for CRUD operations.
+**Factory**: A class that generates fake instances of a model (e.g., UserFactory.php) for testing or seeding.
+**Faker**: A PHP library (integrated via fakerphp/faker) that generates realistic fake data (e.g., names, emails) used inside factories.
+**Seeder**: A class that runs factories (or directly inserts data) to populate the database with sample records during development or testing.
+
+````
 ---
