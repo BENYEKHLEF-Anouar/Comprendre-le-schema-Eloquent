@@ -1,341 +1,253 @@
-````markdown
-# 2.1.3 — Seeders & Factories Eloquent
+# 2.1.4 — Requêtes CRUD avec Eloquent
 
 > **Prérequis :**
-> - Les modèles et relations `User`, `Article` et `Tag` doivent déjà être fonctionnels  
->   (voir les tutoriels **2.1.1 — Migrations & Modèles Eloquent** et **2.1.2 — Relations Eloquent**).
+> - La base de données doit être remplie avec les seeders du chapitre **2.1.3**.  
+> - L’objectif est de manipuler les données directement via Eloquent, sans interface graphique.
 
 ---
 
 ## Glossaire minute
 
 | Terme | Définition |
-|--------|-------------|
-| **Factory** | Modèle décrivant la forme des données fictives à générer |
-| **Seeder** | Script d’insertion automatique dans la base de données |
-| **Faker** | Générateur intégré de textes, emails, dates et contenus aléatoires |
-| **firstOrCreate()** | Crée une donnée uniquement si elle n’existe pas encore (idempotent) |
-| **sync()** | Associe plusieurs enregistrements dans une relation **n–n** (`Article ↔ Tag`) |
+|-------|-----------|
+| **CRUD** | Opérations de base sur une ressource : Create, Read, Update, Delete |
+| **Eloquent** | ORM de Laravel permettant d’interagir avec la base via des objets PHP |
+| **Tinker** | Console interactive pour exécuter des commandes Laravel |
+| **Scope** | Filtre réutilisable sur un modèle |
+| **Query chaining** | Enchaînement fluide de méthodes (ex. `where()->orderBy()->get()`) |
 
 ---
 
 ## Objectif pédagogique
 
-Apprendre à automatiser la création de données réalistes et cohérentes pour le projet **Blog Laravel**, en respectant les relations entre modèles :
+Savoir manipuler la base de données du **Blog Laravel** via Tinker et Eloquent :
 
-- Générer des utilisateurs (`UserFactory`)
-- Générer des tags (`TagFactory`)
-- Générer des articles liés à un utilisateur (`ArticleFactory`)
-- Associer automatiquement les articles ↔ tags via `sync()`
+- Créer des données (`create`, `save`)  
+- Lire des données (`all`, `find`, `where`, `with`)  
+- Mettre à jour (`update`, `save`)  
+- Supprimer (`delete`)  
+- Gérer les relations et les requêtes chaînées
 
 ---
 
 ## Définition théorique
 
-Laravel propose un système combiné **Factory + Seeder** pour faciliter le remplissage des bases de données pendant le développement :
+Eloquent agit comme une **couche intermédiaire** entre PHP et MySQL :
 
-| Élément | Rôle |
-|----------|------|
-| **Factory** | Définit la structure type des données à générer |
-| **Seeder** | Ordonne la création et l’insertion des données |
-| **DatabaseSeeder** | Coordonne l’exécution de tous les seeders |
-| **Faker** | Produit des valeurs aléatoires réalistes (titres, contenus, emails...) |
+- Chaque **modèle** représente une table
+- Chaque instance correspond à une ligne dans cette table
 
-**Commande clé** pour réinitialiser et recharger la base :
-```bash
-php artisan migrate:fresh --seed
-```
+| Action | SQL classique | Équivalent Eloquent |
+|--------|---------------|-------------------|
+| Lire | `SELECT * FROM articles;` | `Article::all();` |
+| Filtrer | `WHERE user_id = 1;` | `Article::where('user_id', 1)->get();` |
+| Insérer | `INSERT INTO articles ...` | `Article::create([...]);` |
+| Modifier | `UPDATE articles ...` | `$article->update([...]);` |
+| Supprimer | `DELETE FROM articles ...` | `$article->delete();` |
 
 ---
 
 ## Tutoriel pratique
 
-### Étape 1 — Créer les **Factories**
-
-Les factories décrivent la **forme des données générées automatiquement** pour chaque modèle.
-
-```bash
-php artisan make:factory UserFactory --model=User
-php artisan make:factory TagFactory --model=Tag
-php artisan make:factory ArticleFactory --model=Article
-```
-
----
-
-#### 📄 `database/factories/UserFactory.php`
-
-Génère de faux utilisateurs avec des emails uniques.
-
-```php
-namespace Database\Factories;
-
-use Illuminate\Database\Eloquent\Factories\Factory;
-use Illuminate\Support\Str;
-
-class UserFactory extends Factory
-{
-    public function definition(): array
-    {
-        return [
-            'name' => fake()->name(),
-            'email' => fake()->unique()->safeEmail(),
-            'email_verified_at' => now(),
-            'password' => bcrypt('password'),
-            'remember_token' => Str::random(10),
-        ];
-    }
-}
-```
-
----
-
-#### 📄 `database/factories/TagFactory.php`
-
-Crée des **tags uniques** avec nom et slug.
-
-```php
-namespace Database\Factories;
-
-use Illuminate\Database\Eloquent\Factories\Factory;
-use Illuminate\Support\Str;
-
-class TagFactory extends Factory
-{
-    public function definition(): array
-    {
-        $name = fake()->unique()->word();
-        return [
-            'name' => ucfirst($name),
-            'slug' => Str::slug($name),
-        ];
-    }
-}
-```
-
----
-
-#### 📄 `database/factories/ArticleFactory.php`
-
-Crée des **articles liés à un utilisateur existant**.
-
-```php
-namespace Database\Factories;
-
-use Illuminate\Database\Eloquent\Factories\Factory;
-use Illuminate\Support\Str;
-use App\Models\User;
-
-class ArticleFactory extends Factory
-{
-    public function definition(): array
-    {
-        $title = fake()->unique()->sentence(4);
-        return [
-            'user_id' => User::inRandomOrder()->value('id') ?? 1,
-            'title' => $title,
-            'slug' => Str::slug($title),
-            'excerpt' => fake()->sentence(12),
-            'content' => fake()->paragraphs(3, true),
-        ];
-    }
-}
-```
-
----
-
-### Étape 2 — Créer les **Seeders**
-
-Les seeders orchestrent la **création et insertion des données** dans le bon ordre.
-
-```bash
-php artisan make:seeder UserSeeder
-php artisan make:seeder TagSeeder
-php artisan make:seeder ArticleSeeder
-php artisan make:seeder PivotArticleTagSeeder
-```
-
----
-
-#### 📄 `database/seeders/UserSeeder.php`
-
-```php
-namespace Database\Seeders;
-
-use Illuminate\Database\Seeder;
-use App\Models\User;
-
-class UserSeeder extends Seeder
-{
-    public function run(): void
-    {
-        User::factory()->count(5)->create();
-    }
-}
-```
-
----
-
-#### 📄 `database/seeders/TagSeeder.php`
-
-```php
-namespace Database\Seeders;
-
-use Illuminate\Database\Seeder;
-use App\Models\Tag;
-
-class TagSeeder extends Seeder
-{
-    public function run(): void
-    {
-        Tag::factory()->count(10)->create();
-    }
-}
-```
-
----
-
-#### 📄 `database/seeders/ArticleSeeder.php`
-
-```php
-namespace Database\Seeders;
-
-use Illuminate\Database\Seeder;
-use App\Models\Article;
-
-class ArticleSeeder extends Seeder
-{
-    public function run(): void
-    {
-        Article::factory()->count(20)->create();
-    }
-}
-```
-
----
-
-#### 📄 `database/seeders/PivotArticleTagSeeder.php`
-
-Associe **1 à 4 tags aléatoires** à chaque article.
-
-```php
-namespace Database\Seeders;
-
-use Illuminate\Database\Seeder;
-use App\Models\Article;
-use App\Models\Tag;
-
-class PivotArticleTagSeeder extends Seeder
-{
-    public function run(): void
-    {
-        $tagIds = Tag::pluck('id');
-
-        Article::all()->each(function ($article) use ($tagIds) {
-            $article->tags()->sync($tagIds->random(rand(1, 4))->all());
-        });
-    }
-}
-```
-
----
-
-### Étape 3 — Orchestration avec **DatabaseSeeder**
-
-```php
-namespace Database\Seeders;
-
-use Illuminate\Database\Seeder;
-
-class DatabaseSeeder extends Seeder
-{
-    public function run(): void
-    {
-        $this->call([
-            UserSeeder::class,
-            TagSeeder::class,
-            ArticleSeeder::class,
-            PivotArticleTagSeeder::class,
-        ]);
-    }
-}
-```
-
----
-
-### Étape 4 — Exécution des seeders
-
-Réinitialiser et remplir la base automatiquement :
-
-```bash
-php artisan migrate:fresh --seed
-```
-
-Si tout fonctionne, la console affichera :
-
-```
-Seeding: UserSeeder
-Seeding: TagSeeder
-Seeding: ArticleSeeder
-Seeding: PivotArticleTagSeeder
-```
-
----
-
-### Étape 5 — Vérification dans **Tinker**
+### Étape 1 — Lancer Tinker
 
 ```bash
 php artisan tinker
 ```
 
-Commandes utiles :
+---
+
+### Étape 2 — Créer des données (Create)
+
+#### Méthode 1 — Avec `create()`
 
 ```php
->>> App\Models\User::count();        // 5 utilisateurs
->>> App\Models\Article::count();     // 20 articles
->>> App\Models\Tag::count();         // 10 tags
->>> App\Models\Article::first()->tags->pluck('name'); // tags associés
->>> App\Models\User::first()->articles->count();      // articles d’un user
+>>> use App\Models\Article;
+>>> $article = Article::create([
+... 'user_id' => 1,
+... 'title' => 'Premier article manuel',
+... 'slug' => 'premier-article',
+... 'excerpt' => 'Introduction à Eloquent CRUD',
+... 'content' => 'Ceci est un test d’ajout via Tinker.'
+... ]);
 ```
 
-Si toutes ces commandes renvoient des données, les seeders fonctionnent.
+💡 Les champs doivent être déclarés dans `$fillable` du modèle.
+
+#### Méthode 2 — Avec `new` et `save()`
+
+```php
+>>> $a = new Article;
+>>> $a->user_id = 1;
+>>> $a->title = 'Deuxième article';
+>>> $a->slug = 'deuxieme-article';
+>>> $a->save();
+```
+
+✅ Vérification :
+
+```php
+>>> Article::count();
+```
+
+---
+
+### Étape 3 — Lire des données (Read)
+
+#### Lister tous les articles
+
+```php
+>>> Article::all();
+```
+
+#### Trouver un article précis
+
+```php
+>>> Article::find(1);
+```
+
+#### Filtrer par mot-clé
+
+```php
+>>> Article::where('title','like','%article%')->get();
+```
+
+#### Lire avec les relations (user, tags)
+
+```php
+>>> Article::with(['user','tags'])->first();
+```
+
+#### Compter les articles par utilisateur
+
+```php
+>>> \App\Models\User::withCount('articles')->get();
+```
+
+---
+
+### Étape 4 — Modifier des données (Update)
+
+```php
+>>> $article = Article::find(1);
+>>> $article->update(['title' => 'Titre modifié']);
+
+>>> $article->title = 'Nouveau titre modifié';
+>>> $article->save();
+```
+
+✅ Vérification :
+
+```php
+>>> Article::find(1)->title;
+```
+
+---
+
+### Étape 5 — Supprimer des données (Delete)
+
+```php
+>>> $article = Article::find(1);
+>>> $article->delete();
+```
+
+💡 Vérification :
+
+```php
+>>> Article::find(1);
+null
+```
+
+---
+
+### Étape 6 — Manipuler les relations
+
+#### Ajouter un tag à un article
+
+```php
+>>> $a = Article::first();
+>>> $a->tags()->attach(1);
+```
+
+#### Retirer un tag
+
+```php
+>>> $a->tags()->detach(1);
+```
+
+#### Remplacer tous les tags
+
+```php
+>>> $a->tags()->sync([2,3,4]);
+```
+
+---
+
+### Étape 7 — Filtrer et trier (Query Builder)
+
+#### Trier par date
+
+```php
+>>> Article::orderBy('created_at','desc')->take(5)->get();
+```
+
+#### Sélectionner certains champs
+
+```php
+>>> Article::select('id','title','slug')->get();
+```
+
+#### Combiner plusieurs conditions
+
+```php
+>>> Article::where('user_id',1)->orderBy('title')->limit(3)->get();
+```
+
+---
+
+### Étape 8 — Créer un scope personnalisé (optionnel)
+
+Dans `app/Models/Article.php` :
+
+```php
+public function scopeRecent($query)
+{
+    return $query->orderBy('created_at', 'desc')->take(5);
+}
+```
+
+Dans Tinker :
+
+```php
+>>> Article::recent()->get();
+```
+
+---
+
+### Bonus — Requêtes avancées
+
+```php
+>>> Article::where('title','like','%laravel%')
+... ->selectRaw('user_id, count(*) as total')
+... ->groupBy('user_id')
+... ->get();
+```
 
 ---
 
 ## Résumé et points-clés
 
-| Élément | Rôle | Exemple |
-|----------|------|----------|
-| **Factory** | Définit la structure des données fictives | `TagFactory` |
-| **Seeder** | Exécute la génération de données dans le bon ordre | `TagSeeder` |
-| **DatabaseSeeder** | Coordonne tous les seeders | `$this->call([...])` |
-| **Faker** | Génère des données réalistes | `fake()->sentence()` |
-| **sync()** | Lie plusieurs entités dans une table pivot | `$article->tags()->sync([...])` |
-
----
-
-## Bonus — Commandes pratiques
-
-| Action | Commande |
-|--------|-----------|
-| (Re)créer la base + données | `php artisan migrate:fresh --seed` |
-| Lancer un seul seeder | `php artisan db:seed --class=UserSeeder` |
-| Créer une factory liée à un modèle | `php artisan make:factory ArticleFactory --model=Article` |
-| Créer un seeder | `php artisan make:seeder ArticleSeeder` |
+| Action | Méthode Eloquent | Exemple |
+|--------|-----------------|---------|
+| Créer | `create()` / `save()` | `Article::create([...])` |
+| Lire | `all()`, `find()`, `where()` | `Article::where('user_id',1)->get()` |
+| Mettre à jour | `update()` | `$article->update([...])` |
+| Supprimer | `delete()` | `$article->delete()` |
+| Relations | `with()`, `attach()`, `sync()` | `$a->tags()->sync([1,2])` |
+| Scopes | `scopeNom()` | `Article::recent()->get()` |
 
 ---
 
 **En résumé :**
-> Les **Factories** définissent la *forme* des données,  
-> Les **Seeders** les *insèrent*,  
-> Et **DatabaseSeeder** orchestre l’ensemble pour peupler la base automatiquement.
-
----
-
-**Migration** : Une classe PHP qui définit les modifications du schéma de base de données (par exemple, la création de tables, l'ajout de colonnes). Elle fonctionne comme un script SQL avec contrôle de version.
-**Model** : Une classe Eloquent (par exemple, User.php) qui représente une table de base de données et fournit une interface ORM (Object-Relational Mapping) pour les opérations CRUD.
-**Factory** : Une classe qui génère de fausses instances d'un modèle (par exemple, UserFactory.php) à des fins de test ou d'amorçage.
-**Faker** : Une bibliothèque PHP (intégrée via fakerphp/faker) qui génère des données factices réalistes (par exemple, des noms, des adresses e-mail) utilisées dans les usines.
-**Seeder** : Une classe qui exécute des usines (ou insère directement des données) pour remplir la base de données avec des exemples d'enregistrements pendant le développement ou les tests.
-
-````
----
+> Eloquent simplifie les opérations CRUD et la gestion des relations,  
+> avec la possibilité de chaîner les requêtes, créer des scopes et manipuler les données directement depuis **Tinker**.
