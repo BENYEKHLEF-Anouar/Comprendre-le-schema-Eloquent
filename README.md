@@ -37,7 +37,7 @@ Déclarer et tester les relations entre modèles Eloquent du projet **Blog** :
 | **n → 1** | `Article → User` | Un article appartient à un utilisateur |
 | **n ↔ n** | `Article ↔ Tag` | Plusieurs articles peuvent avoir plusieurs tags |
 
-💡 Ces relations permettent une navigation fluide entre les entités :
+Ces relations permettent une navigation fluide entre les entités :
 
 ```php
 $user->articles;   // articles de l’utilisateur
@@ -203,6 +203,3 @@ foreach ($user->articles as $article) {
 
 
 ---
-
-
-
