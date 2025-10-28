@@ -1,9 +1,5 @@
 # 2.1.4 — Requêtes CRUD avec Eloquent
 
-> **Prérequis :**
-> - La base de données doit être remplie avec les seeders du chapitre **2.1.3**.  
-> - L’objectif est de manipuler les données directement via Eloquent, sans interface graphique.
-
 ---
 
 ## Glossaire minute
