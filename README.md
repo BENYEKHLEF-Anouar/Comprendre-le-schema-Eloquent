@@ -41,7 +41,7 @@ Laravel propose un système combiné **Factory + Seeder** pour faciliter le remp
 | **DatabaseSeeder** | Coordonne l’exécution de tous les seeders |
 | **Faker** | Produit des valeurs aléatoires réalistes (titres, contenus, emails...) |
 
-💡 **Commande clé** pour réinitialiser et recharger la base :
+**Commande clé** pour réinitialiser et recharger la base :
 ```bash
 php artisan migrate:fresh --seed
 ```
